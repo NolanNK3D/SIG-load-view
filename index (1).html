@@ -580,6 +580,7 @@ NETWORKS.forEach(net=>{
     REAL_BASTIDE.forEach(d=>STATIONS.push(Object.assign({},d,{net:'BASTIDE',op:'Bastide Médical',maint:net.maint,alarm:d.state==='err'})));
     return;
   }
+  return; // Données réelles à venir pour ce réseau
   const places=PLACES[net.id];let pdc=0,idx=0;
   while(pdc<net.pdcTarget){
     idx++;const isDC=Math.random()<net.dcShare,type=isDC?'DC':'AC';
