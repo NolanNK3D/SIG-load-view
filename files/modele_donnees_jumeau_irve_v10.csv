@@ -1,0 +1,301 @@
+﻿entite;domaine;champ;type;cle;fk_vers;obligatoire;valeurs_possibles;description
+organisation;Acteurs;id;uuid;PK;;oui;;Identifiant
+organisation;Acteurs;raison_sociale;text;;;oui;;Nom de l'organisation
+organisation;Acteurs;siren;varchar(9);;;non;;SIREN
+organisation;Acteurs;type_acteur;text[];;;oui;amenageur|operateur|proprietaire|concessionnaire|mainteneur|grd|fournisseur_energie;Roles possibles
+organisation;Acteurs;contact_nom;text;;;non;;Contact
+organisation;Acteurs;contact_email;text;;;non;;Email contact
+organisation;Acteurs;contact_tel;text;;;non;;Telephone contact
+station;Station & Geo;id;uuid;PK;;oui;;Identifiant station
+station;Station & Geo;code_interne;text;;;non;;Reference interne
+station;Station & Geo;nom_station;text;;;oui;;Nom de la station
+station;Station & Geo;nom_enseigne;text;;;non;;Enseigne
+station;Station & Geo;id_station_itinerance;varchar(20);;;non;;ID itinerance IRVE (FRxxxPxxxxx)
+station;Station & Geo;id_station_local;text;;;non;;ID local
+station;Station & Geo;geom;geometry(Point,4326);;;oui;;Point geographique carto
+station;Station & Geo;adresse;text;;;non;;Adresse
+station;Station & Geo;code_insee;varchar(5);;;non;;Code commune INSEE
+station;Station & Geo;implantation;text;;;non;voirie|parking_public|parking_prive_usage_public|parking_prive_clientele|station_dediee;Type d'implantation
+station;Station & Geo;proprietaire_id;uuid;;organisation;non;;Proprietaire
+station;Station & Geo;operateur_id;uuid;FK;organisation;non;;Operateur / CPO
+station;Station & Geo;amenageur_id;uuid;FK;organisation;non;;Amenageur
+station;Station & Geo;date_mise_en_service;date;;;non;;Date de mise en service
+station;Station & Geo;statut_exploitation;text;;;non;en_service|en_travaux|hors_service|projet|decommissionnee;Statut
+station;Station & Geo;nb_places;int;;;non;;Nombre de places
+station;Station & Geo;accessibilite_pmr;text;;;non;;Accessibilite PMR
+station;Station & Geo;restriction_gabarit;text;;;non;;Restriction gabarit
+station;Station & Geo;station_deux_roues;bool;;;non;;Station deux roues
+station;Station & Geo;horaires;text;;;non;;Horaires format OSM
+station;Station & Geo;condition_acces;text;;;non;libre|reserve;Condition d'acces
+station;Station & Geo;reservation;bool;;;non;;Reservation possible
+station;Station & Geo;observations;text;;;non;;Observations
+station;Station & Geo;created_at;timestamptz;;;non;;Date creation enregistrement
+station;Station & Geo;updated_at;timestamptz;;;non;;Date derniere modification
+station;Station & Geo;ouverture_public;text;;;non;public|prive_non_ouvert_public;Ouverture au public ou station/borne privée non ouverte au public
+raccordement_pdl;Electrique;id;uuid;PK;;oui;;Identifiant PDL
+raccordement_pdl;Electrique;station_id;uuid;FK;station;oui;;Station (1 station = 1..n PDL)
+raccordement_pdl;Electrique;num_pdl;varchar(14);;;non;;PRM Enedis (num_pdl IRVE)
+raccordement_pdl;Electrique;grd_id;uuid;FK;organisation;non;;Gestionnaire de reseau
+raccordement_pdl;Electrique;fournisseur_energie_id;uuid;FK;organisation;non;;Fournisseur d'energie
+raccordement_pdl;Electrique;segment_tarifaire;text;;;non;C5|C4|C3|C2|C1;Segment tarifaire
+raccordement_pdl;Electrique;domaine_tension;text;;;non;BT_inf36|BT_sup36|HTA;Domaine de tension
+raccordement_pdl;Electrique;type_raccordement;text;;;non;direct|indirect|branchement;Type raccordement (IRVE)
+raccordement_pdl;Electrique;puissance_souscrite_kva;numeric;;;non;;Puissance souscrite (kVA)
+raccordement_pdl;Electrique;puissance_raccordement_kw;numeric;;;non;;Puissance raccordement (kW)
+raccordement_pdl;Electrique;num_contrat_acheminement;text;;;non;;Contrat CARD / CARD-I
+raccordement_pdl;Electrique;compteur_grd_type;text;;;non;;Type compteur GRD
+raccordement_pdl;Electrique;compteur_grd_num_serie;text;;;non;;N de serie compteur GRD
+raccordement_pdl;Electrique;date_mise_en_service;date;;;non;;Date mise en service raccordement
+tableau_elec;Electrique;id;uuid;PK;;oui;;Identifiant tableau
+tableau_elec;Electrique;pdl_id;uuid;FK;raccordement_pdl;non;;PDL amont
+tableau_elec;Electrique;station_id;uuid;FK;station;non;;Station (denormalise)
+tableau_elec;Electrique;libelle;text;;;non;;TGBT, coffret...
+tableau_elec;Electrique;marque;text;;;non;;Marque
+tableau_elec;Electrique;indice_protection_ip;text;;;non;;Indice IP
+tableau_elec;Electrique;localisation;text;;;non;;Localisation
+tableau_elec;Electrique;geom;geometry(Point,4326);;;non;;Position (optionnel)
+protection;Electrique;id;uuid;PK;;oui;;Identifiant protection
+protection;Electrique;tableau_id;uuid;FK;tableau_elec;non;;Tableau de rattachement
+protection;Electrique;parent_id;uuid;FK;protection;non;;Protection amont (null=tete)
+protection;Electrique;type;text;;;non;disjoncteur|inter_sectionneur|differentiel|parafoudre|fusible;Type
+protection;Electrique;fonction;text;;;non;agcp|tete|depart_borne|depart_aux;Fonction / niveau
+protection;Electrique;borne_id;uuid;FK;borne;non;;Borne protegee (si depart)
+protection;Electrique;marque;text;;;non;;Marque
+protection;Electrique;modele;text;;;non;;Modele
+protection;Electrique;reference;text;;;non;;Reference constructeur
+protection;Electrique;calibre_a;numeric;;;non;;Calibre In (A)
+protection;Electrique;courbe;text;;;non;B|C|D;Courbe de declenchement
+protection;Electrique;nb_poles;int;;;non;;Nombre de poles
+protection;Electrique;pouvoir_coupure_ka;numeric;;;non;;Pouvoir de coupure Icu (kA)
+protection;Electrique;diff_sensibilite_ma;numeric;;;non;;Sensibilite differentielle (mA)
+protection;Electrique;diff_type;text;;;non;AC|A|F|B;Type differentiel
+protection;Electrique;date_pose;date;;;non;;Date de pose
+protection;Electrique;date_fin_garantie;date;;;non;;Fin de garantie
+protection;Electrique;statut;text;;;non;en_service|hs|depose;Statut
+modele_borne;Recharge;id;uuid;PK;;oui;;Identifiant modele (catalogue)
+modele_borne;Recharge;marque;text;;;oui;;Marque (Alpitronic, ABB...)
+modele_borne;Recharge;modele;text;;;oui;;Modele (HYC400...)
+modele_borne;Recharge;courant;text;;;non;AC|DC|hybride;Type de courant
+modele_borne;Recharge;puissance_max_kw;numeric;;;non;;Puissance max (kW)
+modele_borne;Recharge;nb_pdc_max;int;;;non;;Nb points de charge max
+modele_borne;Recharge;nb_modules_puissance;int;;;non;;Nb modules / redresseurs
+modele_borne;Recharge;protocole_ocpp;text;;;non;1.6J|2.0.1;Protocole OCPP
+modele_borne;Recharge;specifications;jsonb;;;non;;Specs complementaires
+borne;Recharge;id;uuid;PK;;oui;;Identifiant borne (instance)
+borne;Recharge;station_id;uuid;FK;station;oui;;Station
+borne;Recharge;modele_borne_id;uuid;FK;modele_borne;non;;Modele catalogue
+borne;Recharge;protection_id;uuid;FK;protection;non;;Depart electrique qui l'alimente
+borne;Recharge;nom_borne;text;;;non;;Nom / repere
+borne;Recharge;num_serie;text;;;non;;N de serie
+borne;Recharge;firmware_version;text;;;non;;Version firmware
+borne;Recharge;charge_box_id;text;;;non;;Identifiant supervision OCPP
+borne;Recharge;geom;geometry(Point,4326);;;non;;Position precise sur carte
+borne;Recharge;date_install;date;;;non;;Date d'installation
+borne;Recharge;date_mise_en_service;date;;;non;;Date mise en service
+borne;Recharge;date_fin_garantie;date;;;non;;Fin de garantie
+borne;Recharge;date_fin_vie_estimee;date;;;non;;Fin de vie estimee (renouvellement)
+borne;Recharge;statut;text;;;non;en_service|maintenance|hs|depose;Statut
+borne;Recharge;photo_url;text;;;non;;Photo
+borne;Recharge;firmware_date;date;;;non;;Date de la version de firmware installée (suivi des mises à jour)
+pdc;Recharge;id;uuid;PK;;oui;;Identifiant PDC (= ligne IRVE)
+pdc;Recharge;borne_id;uuid;FK;borne;oui;;Borne
+pdc;Recharge;id_pdc_itinerance;varchar(20);;;non;;ID itinerance PDC
+pdc;Recharge;id_pdc_local;text;;;non;;ID local PDC
+pdc;Recharge;type_connecteur;text;;;non;ef|type2|combo_ccs|chademo|autre;Type de connecteur
+pdc;Recharge;puissance_nominale_kw;numeric;;;non;;Puissance nominale (kW)
+pdc;Recharge;courant_max_a;numeric;;;non;;Courant max (A)
+pdc;Recharge;mode;int;;;non;3=AC|4=DC;Mode de charge
+pdc;Recharge;connecteur_attache;bool;;;non;;Cable attache vs prise
+modele_composant;Recharge;id;uuid;PK;;oui;;Identifiant modele composant (catalogue)
+modele_composant;Recharge;type_composant;text;;;oui;redresseur|tpe|compteur_mid|imd|modem_sim|ecran|cable_connecteur|contacteur|ventilation|cpu_controleur|parafoudre_dc|borne_secondaire;Type
+modele_composant;Recharge;marque;text;;;non;;Marque
+modele_composant;Recharge;modele;text;;;non;;Modele
+modele_composant;Recharge;specifications;jsonb;;;non;;Specs constructeur
+composant;Recharge;id;uuid;PK;;oui;;Identifiant composant (instance)
+composant;Recharge;borne_id;uuid;FK;borne;oui;;Borne contenante
+composant;Recharge;parent_composant_id;uuid;FK;composant;non;;Sous-ensemble imbrique
+composant;Recharge;modele_composant_id;uuid;FK;modele_composant;non;;Modele catalogue
+composant;Recharge;type_composant;text;;;oui;redresseur|tpe|compteur_mid|imd|modem_sim|ecran|cable_connecteur|contacteur|ventilation|cpu_controleur|parafoudre_dc|borne_secondaire;Type de composant
+composant;Recharge;marque;text;;;non;;Marque
+composant;Recharge;modele;text;;;non;;Modele
+composant;Recharge;reference;text;;;non;;Reference
+composant;Recharge;num_serie;text;;;non;;N de serie (cle garantie/RMA)
+composant;Recharge;puissance_kw;numeric;;;non;;Puissance (redresseurs)
+composant;Recharge;date_pose;date;;;non;;Date de pose
+composant;Recharge;date_fin_garantie;date;;;non;;Fin de garantie
+composant;Recharge;statut;text;;;non;en_service|hs|depose;Statut
+composant;Recharge;specifications;jsonb;;;non;redresseur:{puissance_unitaire_kw,plage_tension_sortie_v} | tpe:{contrat_acquereur,num_tpe} | compteur_mid:{classe_precision,num_homologation_mid} | modem_sim:{iccid,operateur};Specs specifiques au type
+contrat_maintenance;Maintenance/GMAO;id;uuid;PK;;oui;;Identifiant contrat
+contrat_maintenance;Maintenance/GMAO;mainteneur_id;uuid;FK;organisation;non;;Mainteneur
+contrat_maintenance;Maintenance/GMAO;perimetre;text;;;non;parc|station;Perimetre
+contrat_maintenance;Maintenance/GMAO;station_id;uuid;FK;station;non;;Station (si perimetre station)
+contrat_maintenance;Maintenance/GMAO;type;text;;;non;preventif|curatif|full_service;Type de contrat
+contrat_maintenance;Maintenance/GMAO;gti_h;numeric;;;non;;Garantie temps d'intervention (h)
+contrat_maintenance;Maintenance/GMAO;gtr_h;numeric;;;non;;Garantie temps de retablissement (h)
+contrat_maintenance;Maintenance/GMAO;astreinte;bool;;;non;;Astreinte incluse
+contrat_maintenance;Maintenance/GMAO;date_debut;date;;;non;;Debut
+contrat_maintenance;Maintenance/GMAO;date_fin;date;;;non;;Fin
+plan_preventif;Maintenance/GMAO;id;uuid;PK;;oui;;Identifiant plan
+plan_preventif;Maintenance/GMAO;cible_type;text;;;oui;borne|composant|protection|station;Type d'equipement cible
+plan_preventif;Maintenance/GMAO;cible_id;uuid;;;oui;;Reference polymorphe cible
+plan_preventif;Maintenance/GMAO;operation;text;;;non;;Libelle de la gamme
+plan_preventif;Maintenance/GMAO;periodicite_mois;int;;;non;;Periodicite (mois)
+plan_preventif;Maintenance/GMAO;prochaine_echeance;date;;;non;;Prochaine echeance
+plan_preventif;Maintenance/GMAO;derniere_execution;date;;;non;;Date de la dernière exécution de la maintenance préventive
+ordre_travail;Maintenance/GMAO;id;uuid;PK;;oui;;Identifiant OT
+ordre_travail;Maintenance/GMAO;type;text;;;oui;preventif|curatif|depannage;Type d'intervention
+ordre_travail;Maintenance/GMAO;cible_type;text;;;oui;station|borne|pdc|composant|protection;Type d'equipement cible
+ordre_travail;Maintenance/GMAO;cible_id;uuid;;;oui;;Reference polymorphe cible
+ordre_travail;Maintenance/GMAO;station_id;uuid;FK;station;non;;Station (denormalise)
+ordre_travail;Maintenance/GMAO;plan_preventif_id;uuid;FK;plan_preventif;non;;Plan preventif source
+ordre_travail;Maintenance/GMAO;alarme_id;uuid;FK;alarme;non;;Alarme declencheuse
+ordre_travail;Maintenance/GMAO;statut;text;;;non;planifie|en_cours|realise|annule;Statut
+ordre_travail;Maintenance/GMAO;date_planifiee;timestamptz;;;non;;Date planifiee
+ordre_travail;Maintenance/GMAO;date_intervention;timestamptz;;;non;;Date realisee (sert au calcul derniere maint.)
+ordre_travail;Maintenance/GMAO;technicien;text;;;non;;Technicien
+ordre_travail;Maintenance/GMAO;diagnostic;text;;;non;;Diagnostic
+ordre_travail;Maintenance/GMAO;actions;text;;;non;;Actions realisees
+ordre_travail;Maintenance/GMAO;duree_min;int;;;non;;Duree (min)
+ordre_travail;Maintenance/GMAO;cout_eur;numeric;;;non;;Cout (EUR)
+piece_mouvement;Maintenance/GMAO;id;uuid;PK;;oui;;Identifiant mouvement
+piece_mouvement;Maintenance/GMAO;ot_id;uuid;FK;ordre_travail;oui;;OT associe
+piece_mouvement;Maintenance/GMAO;composant_id;uuid;FK;composant;non;;Composant concerne
+piece_mouvement;Maintenance/GMAO;action;text;;;non;pose|depose|remplacement;Action
+piece_mouvement;Maintenance/GMAO;num_serie_ancien;text;;;non;;Ancien n de serie
+piece_mouvement;Maintenance/GMAO;num_serie_nouveau;text;;;non;;Nouveau n de serie
+piece_mouvement;Maintenance/GMAO;sous_garantie;bool;;;non;;RMA / sous garantie
+statut_pdc;Dynamique;pdc_id;uuid;PK,FK;pdc;oui;;PDC (etat courant, ecrase)
+statut_pdc;Dynamique;statut_ocpp;text;;;non;Available|Preparing|Charging|SuspendedEV|Finishing|Faulted|Unavailable;Statut OCPP
+statut_pdc;Dynamique;error_code;text;;;non;;Code erreur
+statut_pdc;Dynamique;ts;timestamptz;;;non;;Horodatage
+statut_pdc;Dynamique;source;text;;;non;;Adaptateur source
+statut_pdc;Dynamique;etat_pdc;text;;;non;en_service|hors_service|inconnu;État du PDC (normalisé, compatible schéma IRVE dynamique / QualiCharge)
+statut_pdc;Dynamique;occupation_pdc;text;;;non;libre|occupe|reserve|inconnu;Occupation du PDC (compatible IRVE dynamique / QualiCharge)
+session_charge;Dynamique;id;uuid;PK;;oui;;Identifiant session (partition par mois)
+session_charge;Dynamique;pdc_id;uuid;FK;pdc;oui;;PDC
+session_charge;Dynamique;station_id;uuid;FK;station;non;;Station (denormalise)
+session_charge;Dynamique;debut;timestamptz;PK;;oui;;Debut (cle de partition)
+session_charge;Dynamique;fin;timestamptz;;;non;;Fin
+session_charge;Dynamique;energie_kwh;numeric;;;non;;Energie delivree (kWh)
+session_charge;Dynamique;duree_min;int;;;non;;Duree (min)
+session_charge;Dynamique;puissance_max_kw;numeric;;;non;;Puissance max atteinte (kW)
+session_charge;Dynamique;id_tag_hash;text;;;non;;Badge usager PSEUDONYMISE (RGPD)
+session_charge;Dynamique;montant_eur;numeric;;;non;;Montant facture (EUR)
+session_charge;Dynamique;index_debut_kwh;numeric;;;non;;Index du compteur MID en début de session (traçabilité légale MID)
+session_charge;Dynamique;index_fin_kwh;numeric;;;non;;Index du compteur MID en fin de session
+session_charge;Dynamique;id_transaction_ocpp;text;;;non;;Identifiant de transaction OCPP
+mesure_grd;Dynamique;id;uuid;PK;;oui;;Identifiant mesure
+mesure_grd;Dynamique;pdl_id;uuid;FK;raccordement_pdl;oui;;PDL
+mesure_grd;Dynamique;date;date;;;non;;Date
+mesure_grd;Dynamique;conso_kwh;numeric;;;non;;Conso reseau (Enedis Data Connect)
+mesure_grd;Dynamique;puissance_max_w;numeric;;;non;;Puissance max (W)
+alarme;Dynamique;id;uuid;PK;;oui;;Identifiant alarme
+alarme;Dynamique;cible_type;text;;;non;borne|pdc|composant|protection;Type cible
+alarme;Dynamique;cible_id;uuid;;;non;;Reference polymorphe cible
+alarme;Dynamique;station_id;uuid;FK;station;non;;Station (denormalise)
+alarme;Dynamique;code;text;;;non;;Code defaut
+alarme;Dynamique;severite;text;;;non;info|warning|critique;Severite
+alarme;Dynamique;debut;timestamptz;;;non;;Debut
+alarme;Dynamique;fin;timestamptz;;;non;;Fin (null = active)
+alarme;Dynamique;source;text;;;non;;Source (OCPP / supervision)
+alarme;Dynamique;ot_id;uuid;FK;ordre_travail;non;;OT genere
+document;Documents;id;uuid;PK;;oui;;Identifiant document
+document;Documents;cible_type;text;;;oui;station|borne|composant|protection|ordre_travail;Type cible
+document;Documents;cible_id;uuid;;;oui;;Reference polymorphe cible
+document;Documents;type_doc;text;;;non;doe|schema_elec|consuel|fiche_constructeur|rapport_intervention|certificat|photo;Type de document
+document;Documents;titre;text;;;non;;Titre
+document;Documents;url;text;;;non;;URL stockage objet
+document;Documents;date_doc;date;;;non;;Date du document
+releve_index;Métrologie;id;uuid;PK;;oui;;Identifiant du relevé
+releve_index;Métrologie;type_compteur;text;;;oui;linky_pdl|mid_borne;Compteur concerné : Linky (PDL) ou MID (borne)
+releve_index;Métrologie;pdl_id;uuid;FK;raccordement_pdl;non;;PDL si compteur Linky
+releve_index;Métrologie;composant_id;uuid;FK;composant;non;;Composant compteur MID si compteur de borne
+releve_index;Métrologie;session_id;uuid;FK;session_charge;non;;Session associée (relevés début/fin MID)
+releve_index;Métrologie;horodatage;timestamptz;;;oui;;Date/heure du relevé
+releve_index;Métrologie;cadran;text;;;non;base|hp|hc|pointe|tempo_bleu_hp|tempo_bleu_hc|tempo_blanc_hp|tempo_blanc_hc|tempo_rouge_hp|tempo_rouge_hc|energie_active;"Cadran/registre (Linky : Base, HP/HC, Tempo… ; MID : énergie active)"
+releve_index;Métrologie;index_kwh;numeric;;;oui;;Valeur de l index (kWh)
+releve_index;Métrologie;code_obis;text;;;non;;Code OBIS du registre (le cas échéant)
+releve_index;Métrologie;source;text;;;non;enedis_data_connect|ocpp|releve_manuel;Source du relevé
+verification_reglementaire;Conformité;id;uuid;PK;;oui;;Identifiant de la vérification
+verification_reglementaire;Conformité;cible_type;text;;;oui;station|borne|installation;Élément vérifié
+verification_reglementaire;Conformité;cible_id;uuid;;;oui;;Référence polymorphe de la cible
+verification_reglementaire;Conformité;station_id;uuid;FK;station;non;;Station (dénormalisé)
+verification_reglementaire;Conformité;type_verification;text;;;oui;consuel|verification_initiale|verification_periodique_q18|controle_organisme;Type de vérification
+verification_reglementaire;Conformité;organisme;text;;;non;;Organisme de contrôle (Consuel, bureau de contrôle…)
+verification_reglementaire;Conformité;date_verification;date;;;non;;Date de la vérification
+verification_reglementaire;Conformité;resultat;text;;;non;conforme|conforme_avec_reserves|non_conforme;Résultat
+verification_reglementaire;Conformité;date_echeance;date;;;non;;Prochaine échéance (vérification périodique)
+verification_reglementaire;Conformité;numero_attestation;text;;;non;;N° d attestation / de rapport
+verification_reglementaire;Conformité;document_id;uuid;FK;document;non;;Rapport/attestation rattaché
+convention_occupation;Foncier;id;uuid;PK;;oui;;Identifiant de la convention
+convention_occupation;Foncier;station_id;uuid;FK;station;oui;;Station concernée
+convention_occupation;Foncier;type;text;;;non;aot|bail|convention_privee|servitude;Type d occupation (AOT, bail…)
+convention_occupation;Foncier;proprietaire_terrain;text;;;non;;Propriétaire du terrain
+convention_occupation;Foncier;bailleur_id;uuid;FK;organisation;non;;Bailleur/propriétaire (si organisation)
+convention_occupation;Foncier;redevance_annuelle_eur;numeric;;;non;;Redevance annuelle (€)
+convention_occupation;Foncier;modalite_redevance;text;;;non;fixe|variable|mixte;Modalité de la redevance
+convention_occupation;Foncier;indexation;text;;;non;;Formule/indice d indexation
+convention_occupation;Foncier;date_debut;date;;;non;;Début de la convention
+convention_occupation;Foncier;date_fin;date;;;non;;Fin de la convention
+convention_occupation;Foncier;duree_mois;int;;;non;;Durée (mois)
+convention_occupation;Foncier;conditions;text;;;non;;Conditions particulières
+connectivite;Connectivité;id;uuid;PK;;oui;;Identifiant
+connectivite;Connectivité;borne_id;uuid;FK;borne;oui;;Borne concernée
+connectivite;Connectivité;type;text;;;non;4g|5g|ethernet|fibre|wifi;Type de connexion
+connectivite;Connectivité;operateur;text;;;non;;Opérateur télécom
+connectivite;Connectivité;iccid;text;;;non;;ICCID de la carte SIM
+connectivite;Connectivité;imsi;text;;;non;;IMSI
+connectivite;Connectivité;apn;text;;;non;;APN
+connectivite;Connectivité;adresse_ip;text;;;non;;Adresse IP (à ne jamais exposer en clair côté logs/URL)
+connectivite;Connectivité;qualite_signal_dbm;numeric;;;non;;Qualité de signal (RSSI, dBm)
+connectivite;Connectivité;forfait_data;text;;;non;;Forfait data souscrit
+connectivite;Connectivité;conso_data_mo;numeric;;;non;;Consommation data sur la période (Mo)
+connectivite;Connectivité;dernier_heartbeat;timestamptz;;;non;;Dernière communication (heartbeat OCPP)
+connectivite;Connectivité;statut_connexion;text;;;non;en_ligne|hors_ligne|intermittent;État de connexion
+moyen_acces;Accès & itinérance;id;uuid;PK;;oui;;Identifiant
+moyen_acces;Accès & itinérance;cible_type;text;;;oui;station|borne|pdc;Niveau d application
+moyen_acces;Accès & itinérance;cible_id;uuid;;;oui;;Référence polymorphe
+moyen_acces;Accès & itinérance;type;text;;;oui;rfid|app_mobile|cb_sans_contact|qr_code|plug_and_charge_iso15118;Mode d authentification / de paiement
+moyen_acces;Accès & itinérance;actif;bool;;;non;;Mode actif
+moyen_acces;Accès & itinérance;details;jsonb;;;non;;Détails (ex. gestion des certificats Plug&Charge)
+itinerance;Accès & itinérance;id;uuid;PK;;oui;;Identifiant
+itinerance;Accès & itinérance;cible_type;text;;;oui;station|borne|pdc;Niveau publié
+itinerance;Accès & itinérance;cible_id;uuid;;;oui;;Référence polymorphe
+itinerance;Accès & itinérance;station_id;uuid;FK;station;non;;Station (dénormalisé)
+itinerance;Accès & itinérance;plateforme;text;;;non;gireve|hubject|aucune;Plateforme d itinérance
+itinerance;Accès & itinérance;evse_id;text;;;non;;Identifiant EVSE (format itinérance)
+itinerance;Accès & itinérance;statut_publication;text;;;non;publiee|non_publiee|en_cours;Statut de publication sur la plateforme
+itinerance;Accès & itinérance;date_publication;date;;;non;;Date de publication
+indisponibilite;Exploitation;id;uuid;PK;;oui;;Identifiant
+indisponibilite;Exploitation;cible_type;text;;;oui;pdc|borne|station;Niveau concerné
+indisponibilite;Exploitation;cible_id;uuid;;;oui;;Référence polymorphe
+indisponibilite;Exploitation;station_id;uuid;FK;station;non;;Station (dénormalisé)
+indisponibilite;Exploitation;debut;timestamptz;;;oui;;Début de l indisponibilité
+indisponibilite;Exploitation;fin;timestamptz;;;non;;Fin (null = en cours)
+indisponibilite;Exploitation;duree_min;int;;;non;;Durée (min)
+indisponibilite;Exploitation;cause;text;;;non;panne|maintenance|reseau_electrique|telecom|vandalisme|force_majeure;Cause
+indisponibilite;Exploitation;imputabilite;text;;;non;operateur|grd|usager|externe;Imputabilité (pour le calcul AFIR)
+indisponibilite;Exploitation;exclue_calcul_dispo;bool;;;non;;Exclue du calcul de disponibilité (maintenance planifiée, force majeure…)
+indisponibilite;Exploitation;alarme_id;uuid;FK;alarme;non;;Alarme à l origine
+indisponibilite;Exploitation;source;text;;;non;supervision|gmao|manuel;Source
+tarif;Tarification & énergie;id;uuid;PK;;oui;;Identifiant
+tarif;Tarification & énergie;cible_type;text;;;oui;reseau|station|pdc;Niveau d application du tarif
+tarif;Tarification & énergie;cible_id;uuid;;;oui;;Référence polymorphe
+tarif;Tarification & énergie;libelle;text;;;non;;Intitulé du tarif
+tarif;Tarification & énergie;type;text;;;oui;kwh|minute|session|abonnement|stationnement;Base de tarification
+tarif;Tarification & énergie;montant;numeric;;;oui;;Montant
+tarif;Tarification & énergie;devise;text;;;non;EUR;Devise
+tarif;Tarification & énergie;fenetre_horaire;text;;;non;;Fenêtre horaire d application (HP/HC, week-end…)
+tarif;Tarification & énergie;conditions;text;;;non;;Conditions (selon contrat, gratuité…)
+tarif;Tarification & énergie;date_debut;date;;;non;;Début de validité
+tarif;Tarification & énergie;date_fin;date;;;non;;Fin de validité
+contrat_energie;Tarification & énergie;id;uuid;PK;;oui;;Identifiant
+contrat_energie;Tarification & énergie;pdl_id;uuid;FK;raccordement_pdl;non;;PDL alimenté
+contrat_energie;Tarification & énergie;reseau_id;uuid;;;non;;Réseau/parc (si contrat global)
+contrat_energie;Tarification & énergie;fournisseur_id;uuid;FK;organisation;oui;;Fournisseur d énergie
+contrat_energie;Tarification & énergie;type_contrat;text;;;non;base|hphc|tempo|offre_marche|arenh;Type de contrat
+contrat_energie;Tarification & énergie;prix_achat_kwh_eur;numeric;;;non;;Prix d achat de l énergie (€/kWh)
+contrat_energie;Tarification & énergie;abonnement_mensuel_eur;numeric;;;non;;Part abonnement (€/mois)
+contrat_energie;Tarification & énergie;fenetre_horaire;text;;;non;;Fenêtres horaires (HP/HC, Tempo)
+contrat_energie;Tarification & énergie;date_debut;date;;;non;;Début du contrat
+contrat_energie;Tarification & énergie;date_fin;date;;;non;;Fin du contrat

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "PowerShell(python3 --version 2>&1)",
+      "PowerShell(node --version 2>&1)",
+      "Bash(which python3 *)",
+      "Read(//usr/**)",
+      "Bash(python3 -c \"import pdfplumber; print\\('ok'\\)\")",
+      "Bash(python3 -c \"import PyPDF2; print\\('ok'\\)\")",
+      "Bash(python3 -m pip install pdfplumber --quiet)",
+      "Read(//c/c/Users/arene/Desktop/outil papa/files/**)",
+      "Bash(grep -E \".{20,}\")",
+      "PowerShell(& \"C:\\\\Users\\\\arene\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-arene-Desktop-outil-papa\\\\4543f93b-4bff-48a3-8120-6b7163649c9f\\\\scratchpad\\\\read_pdf.ps1\")",
+      "PowerShell(& \"C:\\\\Users\\\\arene\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-arene-Desktop-outil-papa\\\\4543f93b-4bff-48a3-8120-6b7163649c9f\\\\scratchpad\\\\read_pdf2.ps1\" 2>&1)",
+      "PowerShell(& \"C:\\\\Users\\\\arene\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-arene-Desktop-outil-papa\\\\4543f93b-4bff-48a3-8120-6b7163649c9f\\\\scratchpad\\\\extract_text.ps1\" 2>&1)",
+      "Bash(Get-Content \"c:\\\\Users\\\\arene\\\\Desktop\\\\outil papa\\\\index.html\")",
+      "Bash(Measure-Object -Line)",
+      "Bash(Select-Object -ExpandProperty Lines)",
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\arene\\\\Desktop\\\\outil papa\\\\index.html\" | Measure-Object -Line\\).Lines)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 \"C:\\\\Users\\\\arene\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-arene-Desktop-outil-papa\\\\ff1912ea-8773-4a06-b074-4185a9504364\\\\scratchpad\\\\gen_bastide.py\")"
+    ]
+  }
+}
