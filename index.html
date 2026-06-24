@@ -154,6 +154,13 @@ tr:last-child td{border-bottom:none}tbody tr:hover{background:#f8fbfa}
 .rbac td,.rbac th{text-align:center;font-size:12.5px}.rbac td:first-child,.rbac th:first-child{text-align:left;font-weight:600}
 .yes{color:var(--ok);font-weight:800}.no{color:#cbd5d1}
 
+/* STATIONS TABLE */
+.st-table{width:100%;border-collapse:collapse;font-size:13px}
+.st-table th{padding:9px 14px;text-align:left;font-size:11.5px;font-weight:700;color:var(--text-soft);border-bottom:2px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;background:var(--surface);position:sticky;top:0;z-index:1}
+.st-table th:hover{color:var(--text)}
+.st-table td{padding:8px 14px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+.st-table tbody tr:last-child td{border-bottom:none}
+.st-table tbody tr:hover td{background:#f8fbfa;cursor:pointer}
 .toolbar{display:flex;gap:9px;align-items:center;padding:14px 26px;flex-wrap:wrap}
 .toolbar select{border:1px solid var(--border-strong);border-radius:7px;padding:7px 9px;font-family:inherit;font-size:12.5px;background:#fff}
 .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
@@ -309,6 +316,7 @@ tr:last-child td{border-bottom:none}tbody tr:hover{background:#f8fbfa}
   <nav class="sidebar">
     <div class="nav-section">Exploitation</div>
     <button class="nav-item active" data-view="map"><span class="ico">🗺️</span> Cartographie SIG</button>
+    <button class="nav-item" data-view="stations"><span class="ico">📋</span> Stations <span class="count" id="cntStationsView">0</span></button>
     <button class="nav-item" data-view="ref"><span class="ico">🗂️</span> Référentiel <span class="count" id="cntStations">0</span></button>
     <button class="nav-item" data-view="ged"><span class="ico">📄</span> GED</button>
     <div class="nav-section">Maintenance</div>
@@ -352,6 +360,41 @@ tr:last-child td{border-bottom:none}tbody tr:hover{background:#f8fbfa}
           </div>
         </div>
         <div class="list-col"><div class="list-head" id="listHead"></div><div id="stationList"></div></div>
+      </div>
+    </section>
+
+    <!-- STATIONS TABLE -->
+    <section class="view" id="view-stations">
+      <div class="page-head"><h1>Stations</h1><p>Vue tabulaire complète — filtres partagés avec la cartographie</p></div>
+      <div class="filters" style="border-top:none">
+        <input type="search" id="stQ" placeholder="Nom, ville, ID…" style="border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-family:inherit;font-size:13px;min-width:180px;outline:none">
+        <div class="fl"><label class="muted">État</label><select id="stState"><option value="">Tous</option><option value="ok">Disponible</option><option value="warn">Occupée</option><option value="err">En défaut</option><option value="off">Hors service</option></select></div>
+        <div class="fl"><label class="muted">Puissance</label><select id="stPow"><option value="">Toutes</option><option value="ac">AC ≤ 22 kW</option><option value="50">DC 50 kW</option><option value="150">DC ≥ 150 kW</option><option value="300">≥ 300 kW</option></select></div>
+        <div class="fl"><label class="muted">Réseau</label><select id="stNet"><option value="">Tous</option></select></div>
+        <div class="fl"><label class="muted">Type</label><select id="stType"><option value="">Tous</option><option value="AC">AC</option><option value="DC">DC</option></select></div>
+        <label class="fl muted" style="user-select:none"><input type="checkbox" id="stAlarm"> Alarme seulement</label>
+        <button class="btn ghost sm" id="stReset">Réinitialiser</button>
+        <div style="margin-left:auto;font-size:12px;color:var(--text-soft);font-weight:600" id="stCount"></div>
+      </div>
+      <div style="padding:0 26px 26px">
+        <div class="card" style="overflow-x:auto;margin-top:14px">
+          <table class="st-table" id="stTable">
+            <thead><tr>
+              <th onclick="stSortBy('state')">État<span id="stSortState"></span></th>
+              <th onclick="stSortBy('name')">Station<span id="stSortName"></span></th>
+              <th onclick="stSortBy('city')">Ville<span id="stSortCity"></span></th>
+              <th onclick="stSortBy('net')">Réseau<span id="stSortNet"></span></th>
+              <th onclick="stSortBy('type')">Type<span id="stSortType"></span></th>
+              <th onclick="stSortBy('power')" style="text-align:right">kW<span id="stSortPower"></span></th>
+              <th onclick="stSortBy('pdc')" style="text-align:right">PDC<span id="stSortPdc"></span></th>
+              <th>Alarme</th>
+              <th onclick="stSortBy('op')">Opérateur<span id="stSortOp"></span></th>
+              <th onclick="stSortBy('maint')">Mainteneur<span id="stSortMaint"></span></th>
+              <th style="text-align:center">Action</th>
+            </tr></thead>
+            <tbody id="stBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -744,6 +787,7 @@ document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{
   const v=b.dataset.view;views.forEach(x=>x.classList.toggle('active',x.id==='view-'+v));
   if(v==='kpi')renderKPI();if(v==='planning')renderAgenda();if(v==='tournee')initTournee();
   if(v==='map')setTimeout(()=>lmap.invalidateSize(),60);
+  if(v==='stations'){syncStFilters();renderStations();}
 });
 
 /* ============ CARTE (Leaflet + IGN Géoplateforme) ============ */
@@ -800,6 +844,7 @@ function renderMap(){
   clusterGroup.addLayers(markers);
   renderList(list);
   document.getElementById('listHead').textContent=`${list.length} stations${selectedNet?' — '+NET_BY_ID[selectedNet].name:''} · synchronisées (EF-C10)`;
+  renderStations();
 }
 function fitToSelection(){const list=filtered();if(!list.length){lmap.setView([46.7,2.4],6);return;}
   if(selectedNet)lmap.fitBounds(L.latLngBounds(list.map(s=>[s.lat,s.lon])).pad(0.12));else lmap.setView([46.7,2.4],6);}
@@ -817,7 +862,78 @@ const bind=(id,key)=>document.getElementById(id).addEventListener('change',e=>{f
 bind('fState','state');bind('fPow','pow');bind('fConn','conn');bind('fAlarm','alarm');
 document.getElementById('mapSearch').addEventListener('input',e=>{filters.q=e.target.value;renderMap();});
 document.getElementById('fColor').onchange=e=>{colorBy=e.target.value;renderLegend();renderMap();};
-document.getElementById('fReset').onclick=()=>{Object.assign(filters,{state:'',pow:'',conn:'',alarm:false,q:''});advFilter={mode:'ET',conds:[]};['fState','fPow','fConn'].forEach(i=>document.getElementById(i).value='');document.getElementById('fAlarm').checked=false;document.getElementById('mapSearch').value='';renderMap();fitToSelection();};
+document.getElementById('fReset').onclick=()=>{Object.assign(filters,{state:'',pow:'',conn:'',alarm:false,q:''});advFilter={mode:'ET',conds:[]};['fState','fPow','fConn'].forEach(i=>document.getElementById(i).value='');document.getElementById('fAlarm').checked=false;document.getElementById('mapSearch').value='';syncStFilters();renderMap();fitToSelection();};
+
+/* ============ STATIONS TABLE ============ */
+let stSort={col:'name',asc:true};
+(()=>{const sel=document.getElementById('stNet');NETWORKS.forEach(n=>sel.add(new Option(n.name,n.id)));})();
+
+function syncStFilters(){
+  document.getElementById('stQ').value=filters.q;
+  document.getElementById('stState').value=filters.state;
+  document.getElementById('stPow').value=filters.pow;
+  document.getElementById('stNet').value=selectedNet;
+  document.getElementById('stAlarm').checked=filters.alarm;
+  document.getElementById('stType').value=filters.type||'';
+}
+function syncMapFilters(){
+  document.getElementById('mapSearch').value=filters.q;
+  document.getElementById('fState').value=filters.state;
+  document.getElementById('fPow').value=filters.pow;
+  document.getElementById('fAlarm').checked=filters.alarm;
+  document.getElementById('tenantSel').value=selectedNet;
+}
+function renderStations(){
+  const list=filtered().filter(s=>!filters.type||s.type===filters.type);
+  const cntEl=document.getElementById('cntStationsView');
+  if(cntEl)cntEl.textContent=list.length;
+  const countEl=document.getElementById('stCount');
+  if(countEl)countEl.textContent=list.length.toLocaleString('fr-FR')+' station'+(list.length>1?'s':'')+(selectedNet?' — '+NET_BY_ID[selectedNet].name:'');
+  if(!document.getElementById('view-stations')?.classList.contains('active'))return;
+  const sorted=[...list].sort((a,b)=>{
+    let va=a[stSort.col]??'',vb=b[stSort.col]??'';
+    if(typeof va==='number')return stSort.asc?va-vb:vb-va;
+    return stSort.asc?String(va).localeCompare(String(vb),'fr'):String(vb).localeCompare(String(va),'fr');
+  });
+  document.getElementById('stBody').innerHTML=sorted.map(s=>`<tr onclick="openStFromTable('${s.id}')">
+    <td><span class="st-dot ${STATE_CLASS[s.state]}" style="display:inline-block;margin-right:6px;vertical-align:middle"></span><span style="font-size:12px;vertical-align:middle">${STATE_LABEL[s.state]}</span></td>
+    <td style="font-weight:600;max-width:240px;overflow:hidden;text-overflow:ellipsis">${s.name}${s.alarm?' 🔔':''}</td>
+    <td class="muted">${s.city||'—'}</td>
+    <td><span class="chip" style="font-size:11px;padding:2px 7px">${NET_BY_ID[s.net]?.name||s.net}</span></td>
+    <td><span class="tag ${s.type==='DC'?'t-dc':'t-ac'}">${s.type}</span></td>
+    <td style="text-align:right;font-weight:700">${s.power}</td>
+    <td style="text-align:right">${s.pdc}</td>
+    <td style="text-align:center">${s.alarm?'<span class="tag t-err" style="font-size:11px">🔔 Alarme</span>':'<span class="muted" style="font-size:12px">—</span>'}</td>
+    <td class="muted" style="font-size:12px">${s.op||'—'}</td>
+    <td class="muted" style="font-size:12px">${s.maint||'—'}</td>
+    <td style="text-align:center"><button class="btn ghost sm" onclick="event.stopPropagation();openStFromTable('${s.id}')">🗺️ Carte</button></td>
+  </tr>`).join('')||'<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--text-faint)">Aucune station pour ces critères.</td></tr>';
+  ['state','name','city','net','type','power','pdc','op','maint'].forEach(col=>{
+    const el=document.getElementById('stSort'+col.charAt(0).toUpperCase()+col.slice(1));
+    if(el)el.textContent=stSort.col===col?(stSort.asc?' ▲':' ▼'):'';
+  });
+}
+window.stSortBy=col=>{stSort.col===col?stSort.asc=!stSort.asc:(stSort.col=col,stSort.asc=true);renderStations();};
+window.openStFromTable=id=>{document.querySelector('[data-view=map]').click();setTimeout(()=>openStation(id),80);};
+
+['stQ','stState','stPow','stNet','stType','stAlarm'].forEach(id=>{
+  const el=document.getElementById(id);if(!el)return;
+  const ev=el.type==='checkbox'?'change':'input';
+  el.addEventListener(ev,e=>{
+    const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
+    if(id==='stNet'){selectedNet=v;document.getElementById('tenantSel').value=v;}
+    else if(id==='stType')filters.type=v;
+    else if(id==='stQ')filters.q=v;
+    else if(id==='stState')filters.state=v;
+    else if(id==='stPow')filters.pow=v;
+    else if(id==='stAlarm')filters.alarm=v;
+    syncMapFilters();renderMap();renderStations();
+  });
+});
+document.getElementById('stReset').onclick=()=>{
+  Object.assign(filters,{state:'',pow:'',conn:'',alarm:false,q:'',type:''});selectedNet='';
+  syncMapFilters();syncStFilters();renderMap();fitToSelection();renderStations();
+};
 document.getElementById('resetView').onclick=()=>{selectedNet?fitToSelection():lmap.setView([46.7,2.4],6);};
 document.getElementById('btnExport').onclick=()=>toast('Export GeoJSON / CSV / IRVE (EF-X2) — '+filtered().length+' stations · format ouvert (RV-01)');
 
