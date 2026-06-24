@@ -370,7 +370,7 @@ tr:last-child td{border-bottom:none}tbody tr:hover{background:#f8fbfa}
       </div>
       <div class="card" style="margin:12px 26px 26px;overflow:auto">
         <table id="stationsTable">
-          <thead><tr><th>État</th><th>ID</th><th>Nom</th><th>Ville</th><th>Réseau</th><th>Opérateur</th><th>Mainteneur</th><th style="text-align:right">PDC</th><th style="text-align:right">Puissance</th><th>Type</th><th style="text-align:center">Alarme</th></tr></thead>
+          <thead><tr><th style="width:28px"></th><th>État</th><th>ID</th><th>Nom</th><th>Ville</th><th>Réseau</th><th>Opérateur</th><th>Mainteneur</th><th style="text-align:right">PDC</th><th style="text-align:right">Puissance</th><th>Type</th><th style="text-align:center">Alarme</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -823,6 +823,7 @@ function renderListBornes(bornes){
     +(bornes.length>CAP?`<div style="padding:14px 16px;text-align:center;color:var(--text-faint);font-size:12px">+ ${bornes.length-CAP} autres bornes.</div>`:'');
 }
 function syncMapControls(){const g=id=>document.getElementById(id);g('fState').value=filters.state;g('fPow').value=filters.pow;g('fConn').value=filters.conn;g('fAlarm').checked=filters.alarm;g('mapSearch').value=filters.q;}
+const stExpanded=new Set();
 function renderStations(){
   const list=filtered();
   const nc=document.getElementById('cntStationsNav');if(nc)nc.textContent=list.length;
@@ -830,21 +831,65 @@ function renderStations(){
   const g=id=>document.getElementById(id);
   if(g('stFState')){g('stFState').value=filters.state;g('stFPow').value=filters.pow;g('stFConn').value=filters.conn;g('stFAlarm').checked=filters.alarm;g('stSearch').value=filters.q;}
   const tbody=document.querySelector('#stationsTable tbody');if(!tbody)return;
-  const SF={ok:'Disponible',warn:'Occupée',err:'En défaut',off:'Hors service'};
-  tbody.innerHTML=list.length?list.map(s=>`<tr style="cursor:pointer" onclick="openStation('${s.id}')">
-    <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:${STATE_HEX[s.state]};flex-shrink:0;display:inline-block"></span>${SF[s.state]||s.state}</span></td>
+  stExpanded.clear();
+  tbody.innerHTML=list.length?list.map(s=>`<tr class="st-row" data-st-row="${s.id}" style="cursor:pointer" onclick="stToggle('${s.id}')">
+    <td style="text-align:center;color:var(--text-faint);font-size:11px;user-select:none" id="stchev-${s.id}">▶</td>
+    <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:${STATE_HEX[s.state]};flex-shrink:0;display:inline-block"></span>${STATE_LABEL[s.state]}</span></td>
     <td class="muted" style="font-size:11.5px">${s.id}</td>
-    <td><b>${s.name}</b></td>
-    <td>${s.city}</td>
-    <td><span class="chip">${s.net}</span></td>
-    <td>${s.op}</td>
-    <td class="muted">${s.maint}</td>
+    <td><b>${s.name}</b>${s.alarm?' 🔔':''}</td>
+    <td>${s.city||'—'}</td>
+    <td><span class="chip">${NET_BY_ID[s.net]?.name||s.net}</span></td>
+    <td>${s.op||'—'}</td>
+    <td class="muted">${s.maint||'—'}</td>
     <td style="text-align:right">${s.pdc}</td>
     <td style="text-align:right">${s.power} kW</td>
-    <td><span class="tag ${s.type==='DC'?'t-info':'t-ok'}" style="font-size:10.5px">${s.type}</span></td>
+    <td><span class="tag ${s.type==='DC'?'t-dc':'t-ac'}" style="font-size:10.5px">${s.type}</span></td>
     <td style="text-align:center">${s.alarm?'<span class="tag t-err" style="font-size:10px">🔔</span>':'<span class="muted">—</span>'}</td>
-  </tr>`).join(''):'<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-faint)">Aucune station.</td></tr>';
+  </tr>`).join(''):'<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-faint)">Aucune station.</td></tr>';
 }
+window.stToggle=function(id){
+  const s=STATIONS.find(x=>x.id===id);if(!s)return;
+  const row=document.querySelector(`[data-st-row="${id}"]`);
+  const chev=document.getElementById('stchev-'+id);
+  const existing=document.getElementById('stexp-'+id);
+  if(existing){existing.remove();stExpanded.delete(id);if(chev)chev.textContent='▶';return;}
+  stExpanded.add(id);if(chev)chev.textContent='▼';
+  let bornesHtml='';
+  if(s.assets?.bornes?.length){
+    bornesHtml=s.assets.bornes.map(b=>`
+      <div style="margin-bottom:10px">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--text)">⚡ ${b.name} — <span style="font-weight:400">${b.model}</span></div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          ${b.pdcs.map(p=>`<tr>
+            <td style="padding:4px 10px;width:14px"><span style="width:8px;height:8px;border-radius:50%;background:${STATE_HEX[p.state]};display:inline-block"></span></td>
+            <td style="padding:4px 10px;font-weight:600">${p.name}</td>
+            <td style="padding:4px 10px"><span class="tag ${p.conn==='Combo CCS'||p.conn==='CHAdeMO'?'t-dc':'t-ac'}" style="font-size:10px">${p.conn}</span></td>
+            <td style="padding:4px 10px;font-weight:700">${p.power} kW</td>
+            <td style="padding:4px 10px;color:var(--text-soft);font-size:11.5px">${STATE_LABEL[p.state]}</td>
+          </tr>`).join('')}
+        </table>
+      </div>`).join('');
+  } else {
+    const n=s.pdc||1;const conns=s.conns?.length?s.conns:[s.type==='DC'?'CCS':'T2'];
+    const model=s.model||'Borne';
+    bornesHtml=`<div style="margin-bottom:6px">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--text)">⚡ ${model} — <span style="font-weight:400">${n} point${n>1?'s':''} de charge</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        ${Array.from({length:n},(_,i)=>`<tr>
+          <td style="padding:4px 10px;width:14px"><span style="width:8px;height:8px;border-radius:50%;background:${STATE_HEX[s.state]};display:inline-block"></span></td>
+          <td style="padding:4px 10px;font-weight:600">PDC-${String(i+1).padStart(2,'0')}</td>
+          <td style="padding:4px 10px"><span class="tag ${s.type==='DC'?'t-dc':'t-ac'}" style="font-size:10px">${conns[i%conns.length]}</span></td>
+          <td style="padding:4px 10px;font-weight:700">${s.power} kW</td>
+          <td style="padding:4px 10px;color:var(--text-soft);font-size:11.5px">${STATE_LABEL[s.state]}</td>
+        </tr>`).join('')}
+      </table>
+    </div>`;
+  }
+  const detailRow=document.createElement('tr');
+  detailRow.id='stexp-'+id;
+  detailRow.innerHTML=`<td colspan="12" style="background:#f8fbfa;padding:14px 28px 14px 52px;border-bottom:1px solid var(--border)">${bornesHtml}<div style="margin-top:10px;display:flex;gap:8px"><button class="btn ghost sm" onclick="event.stopPropagation();document.querySelector('[data-view=map]').click();setTimeout(()=>openStation('${id}'),80)">🗺️ Voir sur la carte</button><button class="btn ghost sm" onclick="event.stopPropagation();ticketFromStation('${id}')">🎫 Créer un ticket</button></div></td>`;
+  row.insertAdjacentElement('afterend',detailRow);
+};
 function fitToSelection(){const list=filtered();if(!list.length){lmap.setView([46.7,2.4],6);return;}
   if(selectedNet)lmap.fitBounds(L.latLngBounds(list.map(s=>[s.lat,s.lon])).pad(0.12));else lmap.setView([46.7,2.4],6);}
 function renderList(list){
