@@ -20,4 +20,4 @@ dans Connecteurs ajoute un bouton mort sur qualicharge
 "dermiere transmission"(avec la date en bas) 
 
 le role admin puisse donner des roles en modifiant les acces 
-et les droits sur maintenance
+et les droits sur maintenance 
