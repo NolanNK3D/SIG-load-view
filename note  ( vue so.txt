@@ -1,13 +1,23 @@
-nouvelle page avec station ( vue sous forme de tableau ) avec filtre (avec possibiliter de faire des export) (quand tu a un filtre il se garde sur la carto et le tableau donc pas besoin de le refaire 10000fois) toute les data se filtre 
+nouvelle page avec station ( vue sous forme de tableau ) 
+avec filtre (avec possibiliter de faire des export) 
+(quand tu a un filtre il se garde sur la carto et 
+le tableau donc pas besoin de le refaire 10000fois) 
+toute les data se filtre 
 voir les bornes et pas que le site avec les nom des bornes
 
-dans GED ajoute une partie recherche avec filtre . et la vue de droite toute les donné sont dans une collonne a droite nom , modifié , date 
+dans GED ajoute une partie recherche avec filtre . 
+et la vue de droite toute les donné sont dans une collonne a droite nom 
+,modifié , date 
 on puisse rentrer un doc pour une station ou pour le réseau entier.
 
-KPI manque la partie filtre avancé et un détail des calculs avec un Hoover en forme de bulle   
-ajoute aide ia avec api qui a acces à la base de donné avec qui tu parles en langages naturel.
+KPI manque la partie filtre avancé et un détail des calculs avec un
+ Hoover en forme de bulle   
+ajoute aide ia avec api qui a acces à la base de donné avec qui 
+tu parles en langages naturel.
 
 
-dans Connecteurs ajoute un bouton mort sur qualicharge "dermiere transmission"(avec la date en bas) 
+dans Connecteurs ajoute un bouton mort sur qualicharge 
+"dermiere transmission"(avec la date en bas) 
 
-le role admin puisse donner des roles en modifiant les acces et les droits sur maintenance
+le role admin puisse donner des roles en modifiant les acces 
+et les droits sur maintenance
