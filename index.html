@@ -801,13 +801,12 @@ function renderMap(){
   clusterGroup.clearLayers();
   const list=filtered(),markers=[],bornes=[];
   list.forEach(s=>{
-    if(s.net==='BASTIDE'){(BASTIDE_BORNES_MAP[s.id]||[]).forEach(b=>bornes.push({...b,alarm:b.state==='err'}));}
-    else{bornes.push({id:s.id,stationId:s.id,station:s.name,lat:s.lat,lon:s.lon,state:s.state,power:s.power,type:s.type,conn:s.type==='DC'?'Combo CCS':'T2',model:s.model||'',fw:s.fw||'',alarm:s.alarm});}
+    bornes.push({id:s.id,stationId:s.id,name:s.name,station:s.name,lat:s.lat,lon:s.lon,state:s.state,power:s.power,type:s.type,conn:(s.conns&&s.conns[0])||(s.type==='DC'?'Combo CCS':'T2'),model:s.model||'',fw:s.fw||'',alarm:s.alarm});
   });
   bornes.forEach(b=>{
     const m=L.marker([b.lat,b.lon],{icon:borneIcon(b),_alarm:b.state==='err'});
     m.bindTooltip(`<b>${b.name}</b><br>${b.station}<br>${b.type} · ${b.power} kW · ${STATE_LABEL[b.state]||b.state}`,{direction:'top',offset:[0,-6]});
-    m.on('click',()=>openStation(b.stationId));markers.push(m);
+    let _ct;m.on('click',()=>{clearTimeout(_ct);_ct=setTimeout(()=>openStation(b.stationId),220);});m.on('dblclick',e=>{clearTimeout(_ct);L.DomEvent.stopPropagation(e);openStation._zoom=true;openStation(b.stationId);});markers.push(m);
   });
   clusterGroup.addLayers(markers);
   renderListBornes(bornes);
@@ -957,25 +956,36 @@ function openStation(id){const s=STATIONS.find(x=>x.id===id);if(!s)return;select
   document.getElementById('dAddr').textContent=`${s.id} · ${NET_BY_ID[s.net].name} · ${s.city}`;
   document.getElementById('dStatusDot').className='st-dot '+STATE_CLASS[s.state];
   document.getElementById('dTags').innerHTML=`<span class="tag ${STATE_TAG[s.state]}">${STATE_LABEL[s.state]}</span><span class="tag ${s.type==='DC'?'t-dc':'t-ac'}">${s.type} · ${s.power} kW</span><span class="tag t-info">${s.pdc} PDC</span>${s.alarm?'<span class="tag t-err">🔔 Alarme</span>':''}`;
-  renderDrawer(s);drawer.classList.add('open');lmap.setView([s.lat,s.lon],Math.max(lmap.getZoom(),13),{animate:true});}
+  renderDrawer(s);drawer.classList.add('open');if(!openStation._zoom)lmap.panTo([s.lat,s.lon],{animate:true,duration:1.0});else{lmap.flyTo([s.lat,s.lon],Math.max(lmap.getZoom(),16),{animate:true,duration:1.4});openStation._zoom=false;}}
 document.getElementById('drawerClose').onclick=()=>{drawer.classList.remove('open');selectedId=null;};
 document.querySelectorAll('.dtab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.dtab').forEach(x=>x.classList.remove('active'));t.classList.add('active');drawerTab=t.dataset.dt;renderDrawer(STATIONS.find(x=>x.id===selectedId));});
 function renderDrawer(s){const body=document.getElementById('drawerBody'),a=s.assets;
-  if(drawerTab==='info'){const pdcs=a.bornes.flatMap(b=>b.pdcs),on=pdcs.filter(p=>p.state!=='off'&&p.state!=='err').length;
-    body.innerHTML=`<div class="sect"><h5>Synthèse</h5><div class="kv"><span>Réseau</span><span>${NET_BY_ID[s.net].name}</span></div><div class="kv"><span>Opérateur</span><span>${s.op}</span></div><div class="kv"><span>Mainteneur</span><span>${s.maint}</span></div><div class="kv"><span>PDC en service</span><span>${on} / ${pdcs.length}</span></div><div class="kv"><span>Disponibilité 6 mois</span><span>${(96+Math.random()*3.5).toFixed(1)} %</span></div></div>
-    <div class="sect"><h5>Raccordement (EF-R1)</h5><div class="kv"><span>PDL / PRM</span><span>${a.raccordement.pdl}</span></div><div class="kv"><span>Puissance souscrite</span><span>${a.raccordement.puissance}</span></div><div class="kv"><span>Gestionnaire</span><span>${a.raccordement.gestionnaire}</span></div></div>
-    <div class="sect"><h5>Suivi &amp; maintenance</h5><div class="kv"><span>Criticité</span><span>${PRIO_LABEL[s.priority]}</span></div><div class="kv"><span>Firmware</span><span>${s.firmware} ${s.fwUpToDate?'✓ à jour':'⚠️ obsolète'}</span></div><div class="kv"><span>Dernière visite</span><span>${fmtD(s.lastVisit)}</span></div><div class="kv"><span>Prochaine visite</span><span>${fmtD(s.nextVisit)} (${daysTo(s.nextVisit)} j)</span></div></div>
-    <div class="sect"><h5>Vieillissement (EF-R4)</h5>${s.age>5?'<div class="chip t-warn" style="border:none">⚠️ Matériel en fin de vie ('+s.age.toFixed(1)+' ans)</div>':'<div class="chip t-ok" style="border:none">✓ Aucune alerte</div>'}</div>
-    <div class="sect" style="border:none"><button class="btn sm" onclick="ticketFromStation('${s.id}')">＋ Créer un ticket</button></div>`;
+  const synPdcs=()=>{const n=s.pdc||1;const conns=s.conns?.length?s.conns:[s.type==='DC'?'CCS':'T2'];return Array.from({length:n},(_,i)=>({name:'PDC-'+String(i+1).padStart(2,'0'),state:s.state,conn:conns[i%conns.length],power:s.power}));};
+  if(drawerTab==='info'){
+    if(a){const pdcs=a.bornes.flatMap(b=>b.pdcs),on=pdcs.filter(p=>p.state!=='off'&&p.state!=='err').length;
+      body.innerHTML=`<div class="sect"><h5>Synthèse</h5><div class="kv"><span>Réseau</span><span>${NET_BY_ID[s.net].name}</span></div><div class="kv"><span>Opérateur</span><span>${s.op}</span></div><div class="kv"><span>Mainteneur</span><span>${s.maint}</span></div><div class="kv"><span>PDC en service</span><span>${on} / ${pdcs.length}</span></div><div class="kv"><span>Disponibilité 6 mois</span><span>${(96+Math.random()*3.5).toFixed(1)} %</span></div></div>
+      <div class="sect"><h5>Raccordement (EF-R1)</h5><div class="kv"><span>PDL / PRM</span><span>${a.raccordement.pdl}</span></div><div class="kv"><span>Puissance souscrite</span><span>${a.raccordement.puissance}</span></div><div class="kv"><span>Gestionnaire</span><span>${a.raccordement.gestionnaire}</span></div></div>
+      <div class="sect"><h5>Suivi &amp; maintenance</h5><div class="kv"><span>Criticité</span><span>${PRIO_LABEL[s.priority]}</span></div><div class="kv"><span>Firmware</span><span>${s.firmware} ${s.fwUpToDate?'✓ à jour':'⚠️ obsolète'}</span></div><div class="kv"><span>Dernière visite</span><span>${fmtD(s.lastVisit)}</span></div><div class="kv"><span>Prochaine visite</span><span>${fmtD(s.nextVisit)} (${daysTo(s.nextVisit)} j)</span></div></div>
+      <div class="sect"><h5>Vieillissement (EF-R4)</h5>${s.age>5?'<div class="chip t-warn" style="border:none">⚠️ Matériel en fin de vie ('+s.age.toFixed(1)+' ans)</div>':'<div class="chip t-ok" style="border:none">✓ Aucune alerte</div>'}</div>
+      <div class="sect" style="border:none"><button class="btn sm" onclick="ticketFromStation('${s.id}')">＋ Créer un ticket</button></div>`;
+    } else {
+      body.innerHTML=`<div class="sect"><h5>Synthèse</h5><div class="kv"><span>Réseau</span><span>${NET_BY_ID[s.net]?.name||s.net}</span></div><div class="kv"><span>Opérateur</span><span>${s.op||'—'}</span></div><div class="kv"><span>Mainteneur</span><span>${s.maint||'—'}</span></div><div class="kv"><span>Points de charge</span><span>${s.pdc}</span></div><div class="kv"><span>Puissance max</span><span>${s.power} kW</span></div><div class="kv"><span>Type</span><span><span class="tag ${s.type==='DC'?'t-dc':'t-ac'}">${s.type}</span></span></div>${s.city?`<div class="kv"><span>Ville</span><span>${s.city}</span></div>`:''}<div class="kv"><span>Coordonnées</span><span>${s.lat?.toFixed(5)}, ${s.lon?.toFixed(5)}</span></div>${s.model?`<div class="kv"><span>Modèle</span><span>${s.model}</span></div>`:''}</div>
+      <div class="sect" style="border:none"><button class="btn sm" onclick="ticketFromStation('${s.id}')">＋ Créer un ticket</button></div>`;
+    }
   } else if(drawerTab==='assets'){
-    body.innerHTML=`<div class="sect"><h5>Tableau ${a.tableau.ref}</h5>${a.tableau.protections.map(p=>`<div class="kv"><span>${p.name}</span><span>${p.ref} · ${p.calibre}</span></div>`).join('')}</div>
-    ${a.bornes.map(b=>`<div class="sect"><h5>${b.name} — ${b.model}</h5><div class="kv"><span>N° série</span><span>${b.serial}</span></div><div class="kv"><span>Pose / Garantie</span><span>${b.installed} → ${b.warranty}</span></div>
-      <div style="margin-top:8px;font-size:12px;color:var(--text-soft)">Organes</div>${b.organes.map(o=>`<div class="kv"><span style="padding-left:12px">↳ ${o.name}</span><span>${o.ref}</span></div>`).join('')}
-      <div style="margin-top:8px;font-size:12px;color:var(--text-soft)">PDC</div>${b.pdcs.map(p=>`<div class="kv"><span style="padding-left:12px"><span class="st-dot ${STATE_CLASS[p.state]}" style="display:inline-block;margin-right:6px"></span>${p.name} (${p.conn})</span><span>${p.power} kW</span></div>`).join('')}</div>`).join('')}`;
+    if(a){
+      body.innerHTML=`<div class="sect"><h5>Tableau ${a.tableau.ref}</h5>${a.tableau.protections.map(p=>`<div class="kv"><span>${p.name}</span><span>${p.ref} · ${p.calibre}</span></div>`).join('')}</div>
+      ${a.bornes.map(b=>`<div class="sect"><h5>${b.name} — ${b.model}</h5><div class="kv"><span>N° série</span><span>${b.serial}</span></div><div class="kv"><span>Pose / Garantie</span><span>${b.installed} → ${b.warranty}</span></div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-soft)">Organes</div>${b.organes.map(o=>`<div class="kv"><span style="padding-left:12px">↳ ${o.name}</span><span>${o.ref}</span></div>`).join('')}
+        <div style="margin-top:8px;font-size:12px;color:var(--text-soft)">PDC</div>${b.pdcs.map(p=>`<div class="kv"><span style="padding-left:12px"><span class="st-dot ${STATE_CLASS[p.state]}" style="display:inline-block;margin-right:6px"></span>${p.name} (${p.conn})</span><span>${p.power} kW</span></div>`).join('')}</div>`).join('')}`;
+    } else {
+      const pdcs=synPdcs();const model=s.model||'Borne';
+      body.innerHTML=`<div class="sect"><h5>${model} — ${pdcs.length} point${pdcs.length>1?'s':''} de charge</h5>${pdcs.map(p=>`<div class="kv"><span><span class="st-dot ${STATE_CLASS[p.state]}" style="display:inline-block;margin-right:6px"></span>${p.name} <span class="muted">(${p.conn})</span></span><span>${p.power} kW</span></div>`).join('')}</div>`;
+    }
   } else if(drawerTab==='gmao'){const tk=TICKETS.filter(t=>t.stationId===s.id);
     body.innerHTML=`<div class="sect" style="border:none"><h5>Tickets rattachés (EF-M4)</h5>${tk.length?tk.map(t=>`<div style="padding:11px;border:1px solid var(--border);border-radius:9px;margin-bottom:9px;cursor:pointer" onclick="openTicket('${t.ref}')"><div style="display:flex;justify-content:space-between"><b>${t.ref}</b><span class="tag ${SLA_TAG[slaState(t)]}">SLA ${slaState(t)}</span></div><div style="font-size:12.5px;margin-top:3px">${t.title}</div><div class="muted" style="font-size:12px;margin-top:4px">${TYPE_LABEL[t.type]} · ${CRIT_LABEL[t.crit]} · ${t.statut}</div></div>`).join(''):'<div class="muted">Aucun ticket.</div>'}<button class="btn sm" onclick="ticketFromStation('${s.id}')">＋ Créer un ticket</button></div>`;
-  } else if(drawerTab==='dyn'){const pdcs=a.bornes.flatMap(b=>b.pdcs);
-    body.innerHTML=`<div class="sect"><h5>État temps réel (EF-D2)</h5>${pdcs.slice(0,8).map(p=>`<div class="kv"><span><span class="st-dot ${STATE_CLASS[p.state]}" style="display:inline-block;margin-right:6px"></span>${p.name}</span><span>${STATE_LABEL[p.state]}</span></div>`).join('')}</div>
+  } else if(drawerTab==='dyn'){const pdcs=a?a.bornes.flatMap(b=>b.pdcs):synPdcs();
+    body.innerHTML=`<div class="sect"><h5>État temps réel (EF-D2)</h5>${pdcs.slice(0,12).map(p=>`<div class="kv"><span><span class="st-dot ${STATE_CLASS[p.state]}" style="display:inline-block;margin-right:6px"></span>${p.name}</span><span>${STATE_LABEL[p.state]}</span></div>`).join('')}</div>
     <div class="sect"><h5>Énergie</h5><div class="kv"><span>Mois en cours</span><span class="muted">N/D</span></div><div class="kv"><span>6 derniers mois</span><span class="muted">N/D</span></div></div>
     <div class="sect"><h5>Alarmes (EF-D4)</h5>${s.alarm?`<div class="chip t-err" style="border:none;margin-bottom:8px">🔔 Défaut — F-019</div><button class="btn sm" onclick="ticketFromStation('${s.id}')">＋ Générer un ticket depuis l'alarme</button>`:'<div class="chip t-ok" style="border:none">✓ Aucune alarme</div>'}</div>`;
   } else {
