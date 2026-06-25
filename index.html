@@ -14,6 +14,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --primary:#00a3c4; --primary-dark:#007a94; --primary-light:#e0f7fc;
@@ -515,6 +516,7 @@ tr:last-child td{border-bottom:none}tbody tr:hover{background:#f8fbfa}
     <!-- ADMIN -->
     <section class="view" id="view-admin">
       <div class="page-head"><h1>Administration</h1><p>Tenants, utilisateurs, profils mainteneur et matrice des droits (RBAC §2.3)</p></div>
+      <div class="toolbar" style="padding-top:0"><div class="tb-spacer" style="flex:1"></div><button class="btn sm" id="btnImportNet">⬆ Importer / mettre à jour un réseau (Excel)</button></div>
       <div class="grid cols-2" style="align-items:start">
         <div class="card" style="overflow:hidden"><div class="list-head">Tenants (Super-administrateur)</div><table id="tenantTable"><thead><tr><th>Tenant</th><th>Volume</th><th>Stations</th><th>Utilisateurs</th><th>Statut</th></tr></thead><tbody></tbody></table></div>
         <div class="card" style="overflow:hidden"><div class="list-head" style="display:flex;justify-content:space-between;align-items:center">Utilisateurs du tenant<button class="btn sm" id="btnAddUser">＋ Ajouter</button></div><table id="userTable"><thead><tr><th>Utilisateur</th><th>Rôle</th><th>Réseaux</th><th>Maintenance</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -699,7 +701,7 @@ function stationDocs(s){return [
   {n:`Photo_borne_${s.id}.jpg`,c:'Photo',size:'2,6 Mo',date:'2026-05-08'},
 ];}
 
-const TENANTS=NETWORKS.map(n=>({name:`${n.name} — ${n.region}`,sta:STATIONS.filter(s=>s.net===n.id).length,volume:n.volume,users:n.users,status:n.id==='CORSE'?'En déploiement':'Actif'}));
+let TENANTS=NETWORKS.map(n=>({name:`${n.name} — ${n.region}`,sta:STATIONS.filter(s=>s.net===n.id).length,volume:n.volume,users:n.users,status:n.id==='CORSE'?'En déploiement':'Actif'}));
 const USERS=[];
 let currentUser=null;
 const ROLE_CAPS={
@@ -1326,7 +1328,7 @@ function applyRBAC(){
   document.getElementById('roleBadge').textContent=currentUser.role;
   document.getElementById('btnLogout').style.display='';
   const show=(id,v)=>{const el=document.getElementById(id);if(el)el.style.display=v?'':'none';};
-  show('btnExport',caps.export);show('btnNewTk',caps.newTicket);show('btnPlanNew',caps.plan);show('tourPlan',caps.plan);show('btnAlarmRule',caps.manageUsers);show('btnAddUser',caps.manageUsers);
+  show('btnExport',caps.export);show('btnNewTk',caps.newTicket);show('btnPlanNew',caps.plan);show('tourPlan',caps.plan);show('btnAlarmRule',caps.manageUsers);show('btnAddUser',caps.manageUsers);show('btnImportNet',caps.manageUsers);
   const allowed=caps.networks;
   document.querySelectorAll('#tenantSel option').forEach(opt=>{if(!opt.value)return;opt.style.display=(!allowed.length||allowed.includes(opt.value))?'':'none';});
 }
@@ -1340,6 +1342,7 @@ function doLogin(){
   setTimeout(()=>lmap.invalidateSize(),120);
   const now=new Date();AUDIT.unshift([now.toLocaleString('fr-FR'),currentUser.name,'Connexion réussie (Supabase Auth)','—','—']);
   renderAudit();loadAdminUsers();toast('Bienvenue, '+currentUser.name+' — '+currentUser.role);
+  DataStore.loadAll().then(res=>{if(res&&(res.networks||res.stations)){refreshAfterData();toast('Données réseaux synchronisées ('+res.networks+' réseaux · '+res.stations+' stations)');}});
 }
 async function fetchProfileAndLogin(sbUser){
   const{data:profile,error}=await _sb.from('profiles').select('*').eq('id',sbUser.id).single();
@@ -1508,6 +1511,386 @@ document.querySelector('[data-view="admin"]').addEventListener('click',()=>{if(c
 /* ============ INIT ============ */
 renderLegend();updateGroupSel();renderMap();renderStations();renderRefTree();renderGedTree();renderGMAO();renderEch();renderConnect();renderAdmin();renderAudit();renderAlarmRules();buildNotifs();updateCounts();
 window.addEventListener('resize',()=>{if(document.getElementById('view-kpi').classList.contains('active'))renderKPI();});
+
+/* ============================================================================
+   IMPORT EXCEL — réseaux & stations (Supabase)
+   ----------------------------------------------------------------------------
+   DataStore = SEUL point qui parle à Supabase. Pour migrer vers une autre base
+   de données, on ne réécrit QUE cet objet (le schéma est du PostgreSQL standard,
+   voir supabase-schema.sql). Le reste de l'appli ne connaît que DataStore.
+   ============================================================================ */
+
+/* ---------- Couche d'accès aux données (abstraction base) ---------- */
+const DataStore = {
+  async loadAll(){
+    try{
+      const {data:nets,error:e1}=await _sb.from('networks').select('*');
+      if(e1) throw e1;
+      (nets||[]).forEach(applyNetworkRow);
+      const {data:stas,error:e2}=await _sb.from('stations').select('*');
+      if(e2) throw e2;
+      (stas||[]).forEach(applyStationRow);
+      return {networks:(nets||[]).length, stations:(stas||[]).length};
+    }catch(err){
+      console.warn('[DataStore.loadAll]',err);
+      return {networks:0, stations:0, error:String((err&&err.message)||err)};
+    }
+  },
+  async upsertNetwork(net){
+    const row={id:net.id,name:net.name,region:net.region||'',maint:net.maint||'',
+      pdc_target:net.pdcTarget||null,volume:net.volume||'',dc_share:net.dcShare||null,
+      bbox:net.bbox||null,users:net.users||0,updated_at:new Date().toISOString()};
+    const {error}=await _sb.from('networks').upsert(row,{onConflict:'id'});
+    if(error) throw error;
+  },
+  async upsertStations(rows){
+    const payload=rows.map(s=>({id:s.id,net_id:s.net,name:s.name||'',city:s.city||'',
+      lat:s.lat,lon:s.lon,pdc:s.pdc||null,power:s.power||null,type:s.type||null,
+      state:s.state||'ok',conns:s.conns||null,model:s.model||'',
+      updated_at:new Date().toISOString()}));
+    for(let i=0;i<payload.length;i+=400){
+      const {error}=await _sb.from('stations').upsert(payload.slice(i,i+400),{onConflict:'id'});
+      if(error) throw error;
+    }
+  },
+};
+
+/* ---------- Fusion en mémoire (par ID) + lignes base -> objets internes ---------- */
+function applyStationLocal(s){
+  const net=NET_BY_ID[s.net];
+  return Object.assign({},s,{op:(net&&net.name)||s.net,maint:(net&&net.maint)||'',alarm:s.state==='err'});
+}
+function applyNetworkRow(r){
+  mergeNetwork({id:r.id,name:r.name||r.id,region:r.region||'',maint:r.maint||'',
+    pdcTarget:r.pdc_target||0,volume:r.volume||'',dcShare:r.dc_share||0,bbox:r.bbox||null,users:r.users||0});
+}
+function applyStationRow(r){
+  mergeStation(applyStationLocal({id:r.id,net:r.net_id,name:r.name||r.id,city:r.city||'',
+    lat:Number(r.lat),lon:Number(r.lon),pdc:r.pdc||1,power:r.power||0,type:r.type||'AC',
+    state:r.state||'ok',conns:Array.isArray(r.conns)?r.conns:(r.conns?[].concat(r.conns):[]),model:r.model||''}));
+}
+function mergeNetwork(net){
+  const i=NETWORKS.findIndex(n=>n.id===net.id);
+  if(i>=0) Object.assign(NETWORKS[i],net); else NETWORKS.push(net);
+  NET_BY_ID[net.id]=NETWORKS.find(n=>n.id===net.id);
+  if(!NET_DOCS[net.id]) NET_DOCS[net.id]=[];
+}
+function mergeStation(s){
+  const i=STATIONS.findIndex(x=>x.id===s.id);
+  if(i>=0) Object.assign(STATIONS[i],s); else STATIONS.push(s);
+}
+
+/* ---------- Reconstruction des vues dérivées après import / sync ---------- */
+function rebuildTenants(){
+  TENANTS=NETWORKS.map(n=>({name:`${n.name} — ${n.region}`,sta:STATIONS.filter(s=>s.net===n.id).length,volume:n.volume,users:n.users,status:n.id==='CORSE'?'En déploiement':'Actif'}));
+}
+function rebuildTenantOptions(){
+  const cur=tenantSel.value;
+  tenantSel.innerHTML='<option value="">Tous les réseaux</option>'+NETWORKS.map(n=>`<option value="${n.id}">${n.name} — ${n.region}</option>`).join('');
+  tenantSel.value=cur;
+  if(typeof currentUser!=='undefined'&&currentUser) applyRBAC();
+}
+function refreshAfterData(){
+  rebuildTenants();
+  rebuildTenantOptions();
+  try{
+    renderMap();renderStations();renderRefTree();renderGedTree();renderGMAO();renderEch();updateCounts();
+  }catch(e){console.warn('[refreshAfterData]',e);}
+  if(document.getElementById('view-admin')&&document.getElementById('view-admin').classList.contains('active')) renderAdmin();
+  if(document.getElementById('view-kpi')&&document.getElementById('view-kpi').classList.contains('active')) renderKPI();
+}
+
+/* ---------- Helpers de parsing ---------- */
+function impEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function impNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'');}
+function impSlug(s){const v=String(s==null?'':s).normalize('NFD').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);return v||'';}
+function impParseNum(v){
+  if(typeof v==='number')return v;
+  if(v==null)return NaN;
+  let s=String(v).trim();if(!s)return NaN;
+  s=s.replace(/[^0-9eE.,+\-]/g,'');
+  if(s.indexOf(',')>=0&&s.indexOf('.')>=0) s=s.replace(/,/g,'');
+  else if(s.indexOf(',')>=0) s=s.replace(/,/g,'.');
+  const n=parseFloat(s);return isFinite(n)?n:NaN;
+}
+function impSplitCoords(v){
+  const s=String(v==null?'':v).trim();if(!s)return [NaN,NaN];
+  let p=s.split(/[;]+/);if(p.length<2)p=s.split(',');if(p.length<2)p=s.split(/\s+/);
+  if(p.length<2)return [NaN,NaN];
+  return [impParseNum(p[0]),impParseNum(p[1])];
+}
+function impMapState(v){
+  const s=impNorm(v);if(!s)return 'ok';
+  if(/(horsservice|offline|^off$|inactif|arret|^hs$)/.test(s))return 'off';
+  if(/(defaut|panne|erreur|error|^err$|^ko$|indispo)/.test(s))return 'err';
+  if(/(partiel|warn|maintenance|occupe|degrade)/.test(s))return 'warn';
+  return 'ok';
+}
+function impParseConns(v,type){
+  const s=String(v==null?'':v).toUpperCase();const found=[];
+  [['CHADEMO','CHAdeMO'],['CHADEM','CHAdeMO'],['CCS','CCS'],['COMBO','CCS'],['TYPE 2','T2'],['TYPE2','T2'],['T2','T2'],['T3','T3'],['E/F','EF'],['EF','EF'],['DOMESTIQUE','EF']]
+    .forEach(([pat,lab])=>{if(s.indexOf(pat)>=0&&found.indexOf(lab)<0)found.push(lab);});
+  return found.length?found:(type==='DC'?['CCS']:['T2']);
+}
+function impBbox(rows){
+  let loMin=999,loMax=-999,laMin=999,laMax=-999;
+  rows.forEach(s=>{if(isFinite(s.lon)){loMin=Math.min(loMin,s.lon);loMax=Math.max(loMax,s.lon);}if(isFinite(s.lat)){laMin=Math.min(laMin,s.lat);laMax=Math.max(laMax,s.lat);}});
+  return loMin<=loMax?{lonMin:loMin,lonMax:loMax,latMin:laMin,latMax:laMax}:null;
+}
+
+/* ---------- Assistant d'import (3 étapes) ---------- */
+let IMP=null;
+const IMP_FIELDS=[
+  {k:'id',    label:'Identifiant station', hint:'code unique (sinon généré)'},
+  {k:'name',  label:'Nom de la station', req:true},
+  {k:'city',  label:'Ville / Commune'},
+  {k:'lat',   label:'Latitude'},
+  {k:'lon',   label:'Longitude'},
+  {k:'coords',label:'Coordonnées « lat, lon »', hint:'si lat+lon dans une seule colonne'},
+  {k:'power', label:'Puissance'},
+  {k:'pdc',   label:'Nombre de points de charge'},
+  {k:'type',  label:'Type (AC / DC)'},
+  {k:'state', label:'État'},
+  {k:'conns', label:'Connecteurs / prises'},
+  {k:'model', label:'Marque / Modèle'},
+];
+const IMP_SYN={
+  id:['id','code','chargeboxid','charging_box_id','id_chargeur','numero de serie','serial','charge_box_serial_number'],
+  name:['nom','name','alias','site','site_name','charging_station_alias','libelle','station'],
+  city:['ville','city','commune','localite','site_area_name'],
+  lat:['lat','latitude','y'],
+  lon:['lon','lng','long','longitude','x'],
+  coords:['coordonnees','localisation','coords','gps','geoloc','position'],
+  power:['puissance','power','max_power','puissance maximale','puissancemaximale','kw','kva'],
+  pdc:['pdc','nombre de prise','nombre de prises','nombre de connecteurs','connectors','connectors_count','charging_station_connectors_count','points de charge'],
+  type:['type','current_type','connector_current_type','courant'],
+  state:['etat','state','statut','status','etat chargeur','en service'],
+  conns:['connecteur','connecteurs','type de prise','connector_type','prise','prises'],
+  model:['model','modele','marque','marque - modele','vendor','fabricant'],
+};
+
+function openImportWizard(){
+  if(typeof currentUser!=='undefined'&&currentUser&&getUserCaps(currentUser).manageUsers===false){toast('Action réservée aux administrateurs.');return;}
+  IMP={wb:null,fileName:'',sheetName:'',headerRow:1,headers:[],rows:[],mapping:{},powerUnit:'kW',target:{mode:'existing',netId:selectedNet||(NETWORKS[0]&&NETWORKS[0].id)}};
+  impRenderStep1();
+}
+
+function impRenderStep1(){
+  const t=IMP.target||{mode:'existing'};const newMode=t.mode==='new';const nn=t.newNet||{};
+  const netOpts=NETWORKS.map(n=>'<option value="'+n.id+'"'+((t.netId)===n.id?' selected':'')+'>'+impEsc(n.name)+' — '+impEsc(n.region)+'</option>').join('');
+  const sheetOpts=IMP.wb?IMP.wb.SheetNames.map(n=>'<option'+(n===IMP.sheetName?' selected':'')+'>'+impEsc(n)+'</option>').join(''):'';
+  const body=''
+    +'<div class="field"><label>1. Fichier Excel ou CSV</label><input type="file" id="impFileInput" accept=".xlsx,.xls,.csv,.ods" onchange="impFile(this)"></div>'
+    +'<div id="impFileInfo" class="muted" style="font-size:12px;margin:-6px 0 10px">'+(IMP.fileName?('<b>'+impEsc(IMP.fileName)+'</b> · feuille « '+impEsc(IMP.sheetName)+' » · '+IMP.headers.length+' colonnes · '+IMP.rows.length+' lignes'):'')+'</div>'
+    +'<div id="impSheetWrap" style="'+(IMP.wb?'display:grid;':'display:none;')+'grid-template-columns:1fr 130px;gap:12px">'
+      +'<div class="field"><label>Feuille</label><select id="impSheet" onchange="impSheetChange()">'+sheetOpts+'</select></div>'
+      +'<div class="field"><label>Ligne d\'en-tête</label><input type="number" id="impHeaderRow" value="'+(IMP.headerRow||1)+'" min="1" onchange="impLoadSheet()"></div>'
+    +'</div>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">'
+    +'<div class="field"><label>2. Réseau cible</label>'
+      +'<label class="check" style="display:block;padding:3px 0"><input type="radio" name="imptarget" value="existing"'+(!newMode?' checked':'')+' onchange="impTargetMode(\'existing\')"> Mettre à jour un réseau existant</label>'
+      +'<label class="check" style="display:block;padding:3px 0"><input type="radio" name="imptarget" value="new"'+(newMode?' checked':'')+' onchange="impTargetMode(\'new\')"> Créer un nouveau réseau</label>'
+    +'</div>'
+    +'<div id="impExisting" class="field" style="'+(newMode?'display:none':'')+'"><label>Réseau</label><select id="impNetSel">'+netOpts+'</select></div>'
+    +'<div id="impNew" style="'+(newMode?'':'display:none')+'">'
+      +'<div class="field"><label>Nom du réseau</label><input id="impNewName" oninput="impSuggestId()" value="'+impEsc(nn.name||'')+'" placeholder="ex : Réseau Vendée Mobilité"></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        +'<div class="field"><label>Code (identifiant)</label><input id="impNewId" value="'+impEsc(nn.id||'')+'" placeholder="ex : VENDEE"></div>'
+        +'<div class="field"><label>Région</label><input id="impNewRegion" value="'+impEsc(nn.region||'')+'" placeholder="ex : Vendée (85)"></div>'
+      +'</div>'
+      +'<div class="field"><label>Mainteneur</label><input id="impNewMaint" value="'+impEsc(nn.maint||'')+'" placeholder="ex : Firalp"></div>'
+    +'</div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Annuler</button><button class="btn" onclick="impToStep2()">Suivant : colonnes →</button>';
+  openModal('Importer un réseau — étape 1/3 · fichier & cible',body,foot,'wide');
+}
+
+function impFile(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(typeof XLSX==='undefined'){toast('Librairie Excel non chargée (vérifiez la connexion internet).');return;}
+  const info=document.getElementById('impFileInfo');if(info)info.textContent='Lecture du fichier…';
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      IMP.wb=XLSX.read(e.target.result,{type:'array'});
+      IMP.fileName=f.name;IMP.sheetName=IMP.wb.SheetNames[0];IMP.headerRow=1;
+      const sel=document.getElementById('impSheet');
+      if(sel){sel.innerHTML=IMP.wb.SheetNames.map(n=>'<option>'+impEsc(n)+'</option>').join('');}
+      const wrap=document.getElementById('impSheetWrap');if(wrap)wrap.style.display='grid';
+      IMP.mapping={};
+      impLoadSheet();
+    }catch(err){if(info)info.textContent='Erreur de lecture : '+err.message;}
+  };
+  reader.onerror=()=>{if(info)info.textContent='Impossible de lire le fichier.';};
+  reader.readAsArrayBuffer(f);
+}
+function impSheetChange(){const sel=document.getElementById('impSheet');if(sel)IMP.sheetName=sel.value;impLoadSheet();}
+function impLoadSheet(){
+  if(!IMP.wb)return;
+  const ws=IMP.wb.Sheets[IMP.sheetName];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',blankrows:false});
+  const hrEl=document.getElementById('impHeaderRow');
+  const hr=Math.max(1,parseInt((hrEl&&hrEl.value)||IMP.headerRow||1))-1;
+  IMP.headerRow=hr+1;
+  IMP.headers=(aoa[hr]||[]).map((h,i)=>{const tt=String(h).trim();return tt||('Colonne '+(i+1));});
+  IMP.rows=aoa.slice(hr+1).filter(r=>r.some(c=>String(c).trim()!==''));
+  IMP.mapping={};
+  const info=document.getElementById('impFileInfo');
+  if(info)info.innerHTML='<b>'+impEsc(IMP.fileName)+'</b> · feuille « '+impEsc(IMP.sheetName)+' » · '+IMP.headers.length+' colonnes · '+IMP.rows.length+' lignes';
+}
+function impTargetMode(mode){
+  IMP.target.mode=mode;
+  const ex=document.getElementById('impExisting'),nw=document.getElementById('impNew');
+  if(ex)ex.style.display=mode==='existing'?'':'none';
+  if(nw)nw.style.display=mode==='new'?'':'none';
+}
+function impSuggestId(){
+  const idEl=document.getElementById('impNewId'),nameEl=document.getElementById('impNewName');
+  if(idEl&&nameEl&&!idEl.value.trim())idEl.value=impSlug(nameEl.value);
+}
+
+function impCaptureStep1(){
+  const checked=document.querySelector('input[name="imptarget"]:checked');
+  const mode=checked?checked.value:'existing';
+  IMP.target.mode=mode;
+  if(mode==='existing'){
+    const sel=document.getElementById('impNetSel');IMP.target.netId=sel?sel.value:'';
+    if(!IMP.target.netId){toast('Choisissez un réseau cible.');return false;}
+  }else{
+    const name=(document.getElementById('impNewName').value||'').trim();
+    let id=impSlug(document.getElementById('impNewId').value||name);
+    if(!name){toast('Donnez un nom au nouveau réseau.');return false;}
+    if(!id){toast('Donnez un code (identifiant) au réseau.');return false;}
+    IMP.target.newNet={name:name,id:id,region:(document.getElementById('impNewRegion').value||'').trim(),maint:(document.getElementById('impNewMaint').value||'').trim()};
+    IMP.target.netId=id;
+  }
+  return true;
+}
+function impAutodetect(){
+  const norm=IMP.headers.map(impNorm);const used={};
+  IMP_FIELDS.forEach(f=>{
+    const syns=IMP_SYN[f.k]||[];let best=-1,bestScore=0;
+    norm.forEach((h,i)=>{
+      if(used[i]||!h)return;let score=0;
+      syns.forEach(s=>{const sn=impNorm(s);if(!sn)return;
+        if(h===sn)score=Math.max(score,4);
+        else if(sn.length>=3&&h.indexOf(sn)>=0)score=Math.max(score,2);
+        else if(sn.length>=4&&h.length>=4&&sn.indexOf(h)>=0)score=Math.max(score,1);});
+      if(score>bestScore){bestScore=score;best=i;}
+    });
+    if(best>=0&&bestScore>0){IMP.mapping[f.k]=best;used[best]=1;}
+  });
+  if(IMP.mapping.power!=null){
+    const vals=IMP.rows.slice(0,40).map(r=>impParseNum(r[IMP.mapping.power])).filter(v=>isFinite(v)&&v>0).sort((a,b)=>a-b);
+    if(vals.length){const med=vals[Math.floor(vals.length/2)];IMP.powerUnit=med>1000?'W':'kW';}
+  }
+}
+function impToStep2(){
+  if(!IMP.wb||!IMP.headers.length){toast('Choisissez d\'abord un fichier.');return;}
+  if(!impCaptureStep1())return;
+  if(!Object.keys(IMP.mapping).length) impAutodetect();
+  impRenderStep2();
+}
+function impRenderStep2(){
+  const opts=sel=>'<option value="-1">— ignorer —</option>'+IMP.headers.map((h,i)=>'<option value="'+i+'"'+(sel===i?' selected':'')+'>'+impEsc(h)+'</option>').join('');
+  const rows=IMP_FIELDS.map(f=>{const cur=IMP.mapping[f.k];const sel=(cur==null?-1:cur);
+    return '<tr><td style="padding:5px 10px 5px 0;white-space:nowrap;vertical-align:top"><b>'+f.label+'</b>'+(f.req?' <span style="color:var(--err)">*</span>':'')+(f.hint?'<div class="muted" style="font-size:10.5px">'+f.hint+'</div>':'')+'</td>'
+      +'<td style="padding:5px 0"><select id="impmap_'+f.k+'" style="width:100%">'+opts(sel)+'</select></td></tr>';}).join('');
+  const puW=IMP.powerUnit==='W';
+  const body=''
+    +'<p class="muted" style="font-size:12px;margin-top:0">Associez chaque information à une colonne du fichier. Les correspondances évidentes sont pré-remplies — laissez « ignorer » si l\'info est absente.</p>'
+    +'<table style="width:100%;border-collapse:collapse">'+rows+'</table>'
+    +'<div style="display:grid;grid-template-columns:240px 1fr;gap:12px;align-items:end;margin-top:12px">'
+      +'<div class="field" style="margin:0"><label>Unité de puissance</label><select id="impPowerUnit"><option value="kW"'+(!puW?' selected':'')+'>kW</option><option value="W"'+(puW?' selected':'')+'>Watts (W) → converti en kW</option></select></div>'
+      +'<div class="muted" style="font-size:11px">Si lat/lon sont réunis dans une colonne (ex. « 49.16, -0.52 »), mappez « Coordonnées » et laissez Latitude/Longitude sur ignorer.</div>'
+    +'</div>';
+  const foot='<button class="btn ghost" onclick="impBackTo1()">← Retour</button><button class="btn" onclick="impToStep3()">Aperçu →</button>';
+  openModal('Importer un réseau — étape 2/3 · colonnes',body,foot,'wide');
+}
+function impCaptureStep2(){
+  IMP.mapping={};
+  IMP_FIELDS.forEach(f=>{const el=document.getElementById('impmap_'+f.k);if(el){const v=parseInt(el.value);if(v>=0)IMP.mapping[f.k]=v;}});
+  const pu=document.getElementById('impPowerUnit');if(pu)IMP.powerUnit=pu.value;
+}
+function impBuildRows(){
+  const net=IMP.target.netId,m=IMP.mapping;
+  const get=(row,f)=>m[f]!=null?row[m[f]]:'';
+  const out=[],seen={};let skipped=0;
+  IMP.rows.forEach((row,ri)=>{
+    let lat,lon;
+    if(m.coords!=null){const c=impSplitCoords(get(row,'coords'));lat=c[0];lon=c[1];}
+    else{lat=impParseNum(get(row,'lat'));lon=impParseNum(get(row,'lon'));}
+    let id=String(get(row,'id')||'').trim();if(!id)id=net+'-'+String(ri+1).padStart(4,'0');
+    let power=impParseNum(get(row,'power'));if(!isFinite(power))power=0;
+    if(IMP.powerUnit==='W'&&power)power=Math.round(power/100)/10;
+    let type=String(get(row,'type')||'').toUpperCase().replace(/[^A-Z]/g,'');
+    if(type!=='AC'&&type!=='DC')type=power>=43?'DC':'AC';
+    const name=String(get(row,'name')||'').trim()||id;
+    let pdc=parseInt(impParseNum(get(row,'pdc')));if(!isFinite(pdc)||pdc<1)pdc=1;
+    const s={id:id,net:net,name:name,city:String(get(row,'city')||'').trim(),lat:lat,lon:lon,
+      pdc:pdc,power:power||0,type:type,state:impMapState(get(row,'state')),
+      conns:impParseConns(get(row,'conns'),type),model:String(get(row,'model')||'').trim()};
+    if(!isFinite(s.lat)||!isFinite(s.lon)||(s.lat===0&&s.lon===0)){skipped++;return;}
+    if(seen[s.id]){out[seen[s.id]-1]=s;return;}
+    seen[s.id]=out.length+1;out.push(s);
+  });
+  return {rows:out,skipped:skipped};
+}
+function impToStep3(){
+  impCaptureStep2();
+  IMP.built=impBuildRows();
+  impRenderStep3();
+}
+function impRenderStep3(){
+  const built=IMP.built,net=IMP.target.netId;
+  const existingIds=new Set(STATIONS.filter(s=>s.net===net).map(s=>s.id));
+  let nNew=0,nUpd=0;built.rows.forEach(s=>{existingIds.has(s.id)?nUpd++:nNew++;});
+  const netLabel=IMP.target.mode==='new'?(impEsc(IMP.target.newNet.name)+' ('+impEsc(net)+') — NOUVEAU'):impEsc((NET_BY_ID[net]&&NET_BY_ID[net].name)||net);
+  const head='<tr><th style="text-align:left">ID</th><th style="text-align:left">Nom</th><th style="text-align:left">Ville</th><th>Lat</th><th>Lon</th><th>kW</th><th>Type</th><th></th></tr>';
+  const prev=built.rows.slice(0,8).map(s=>'<tr><td style="font-size:11px">'+impEsc(s.id)+'</td><td>'+impEsc(s.name)+'</td><td>'+impEsc(s.city)+'</td><td style="text-align:right">'+(isFinite(s.lat)?s.lat.toFixed(4):'—')+'</td><td style="text-align:right">'+(isFinite(s.lon)?s.lon.toFixed(4):'—')+'</td><td style="text-align:right">'+s.power+'</td><td style="text-align:center"><span class="tag '+(s.type==='DC'?'t-dc':'t-ac')+'">'+s.type+'</span></td><td>'+(existingIds.has(s.id)?'<span class="tag t-info">màj</span>':'<span class="tag t-ok">new</span>')+'</td></tr>').join('');
+  const body=''
+    +'<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px">'
+      +'<div><div class="muted" style="font-size:11px">Réseau cible</div><b>'+netLabel+'</b></div>'
+      +'<div><div class="muted" style="font-size:11px">À ajouter</div><b style="color:#16a34a">'+nNew+'</b></div>'
+      +'<div><div class="muted" style="font-size:11px">À mettre à jour</div><b style="color:#2563eb">'+nUpd+'</b></div>'
+      +'<div><div class="muted" style="font-size:11px">Ignorées (coord. invalides)</div><b>'+built.skipped+'</b></div>'
+    +'</div>'
+    +'<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px"><table style="width:100%;border-collapse:collapse"><thead>'+head+'</thead><tbody>'+prev+'</tbody></table></div>'
+    +(built.rows.length>8?'<div class="muted" style="font-size:11px;margin-top:6px">+ '+(built.rows.length-8)+' autre(s) ligne(s)…</div>':'')
+    +'<p class="muted" style="font-size:11px;margin-top:10px">Fusion par <b>identifiant</b> : les stations existantes sont mises à jour, les nouvelles ajoutées. Rien n\'est supprimé.</p>';
+  const total=nNew+nUpd;
+  const foot='<button class="btn ghost" onclick="impBackTo2()">← Retour</button><button class="btn" onclick="impDoImport(this)"'+(total?'':' disabled')+'>Importer '+total+' station(s)</button>';
+  openModal('Importer un réseau — étape 3/3 · aperçu',body,foot,'wide');
+}
+async function impDoImport(btn){
+  if(!IMP.built||!IMP.built.rows.length){toast('Aucune station valide à importer.');return;}
+  if(btn){btn.disabled=true;btn.textContent='Import en cours…';}
+  try{
+    if(IMP.target.mode==='new'){
+      const nn=IMP.target.newNet,totalPdc=IMP.built.rows.reduce((a,s)=>a+(s.pdc||0),0);
+      const net={id:nn.id,name:nn.name||nn.id,region:nn.region||'',maint:nn.maint||'',
+        pdcTarget:totalPdc,volume:IMP.built.rows.length+' stations · '+totalPdc+' PDC (import Excel)',
+        dcShare:0,bbox:impBbox(IMP.built.rows),users:0};
+      await DataStore.upsertNetwork(net);
+      mergeNetwork(net);
+    }
+    await DataStore.upsertStations(IMP.built.rows);
+    const existingIds=new Set(STATIONS.filter(s=>s.net===IMP.target.netId).map(s=>s.id));
+    let nNew=0,nUpd=0;
+    IMP.built.rows.forEach(s=>{existingIds.has(s.id)?nUpd++:nNew++;mergeStation(applyStationLocal(s));});
+    refreshAfterData();
+    try{if(typeof AUDIT!=='undefined')AUDIT.unshift([new Date().toLocaleString('fr-FR'),(typeof currentUser!=='undefined'&&currentUser&&currentUser.name)||'—','Import Excel — réseau '+IMP.target.netId+' ('+nNew+' nouv., '+nUpd+' màj)','—','—']);}catch(e){}
+    closeModal();
+    toast('✓ Import terminé : '+nNew+' ajoutée(s), '+nUpd+' mise(s) à jour'+(IMP.built.skipped?' · '+IMP.built.skipped+' ignorée(s)':''));
+  }catch(err){
+    if(btn){btn.disabled=false;btn.textContent='Importer';}
+    const msg=String((err&&err.message)||err);
+    if(/relation|table|does not exist|schema cache|could not find|404/i.test(msg)) toast('Tables Supabase manquantes — exécutez supabase-schema.sql dans Supabase. ('+msg+')');
+    else toast('Erreur d\'import : '+msg);
+  }
+}
+const impBackTo1=impRenderStep1, impBackTo2=impRenderStep2;
+Object.assign(window,{openImportWizard,impFile,impSheetChange,impLoadSheet,impTargetMode,impSuggestId,impToStep2,impToStep3,impBackTo1,impBackTo2,impDoImport});
+(function(){const b=document.getElementById('btnImportNet');if(b)b.onclick=function(){openImportWizard();};})();
 </script>
 </body>
 </html>
